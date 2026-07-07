@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reward Ledger — Perpetual Simulation</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+  :root{
+    --ink:#0E1626;
+    --ink-2:#121D33;
+    --card:#16223B;
+    --hairline:#26344F;
+    --text:#EDEFF3;
+    --muted:#8A96AC;
+    --teal:#4FD1C5;
+    --amber:#E8A33D;
+    --danger:#E8664D;
+    --green:#6FCF97;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:var(--ink);
+    color:var(--text);
+    font-family:'IBM Plex Sans', sans-serif;
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3{ font-family:'Space Grotesk', sans-serif; letter-spacing:-0.01em; }
+  .mono{ font-family:'IBM Plex Mono', monospace; }
+  .wrap{ max-width:1120px; margin:0 auto; padding:0 28px; }
+
+  /* clock strip */
+  .clockbar{
+    border-bottom:1px solid var(--hairline);
+    background:var(--ink-2);
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12.5px;
+    color:var(--muted);
+    overflow-x:auto;
+  }
+  .clockbar .wrap{ display:flex; padding:0 28px; }
+  .clock-cell{
+    display:flex; align-items:center; gap:8px;
+    padding:10px 22px 10px 0; margin-right:22px;
+    border-right:1px solid var(--hairline); white-space:nowrap;
+  }
+  .clock-cell:last-child{ border-right:none; }
+  .clock-dot{ width:6px; height:6px; border-radius:50%; background:var(--teal); box-shadow:0 0 0 3px rgba(79,209,197,0.15); }
+  .clock-region{ color:var(--text); font-weight:500; }
+  .clock-time{ color:var(--teal); }
+
+  header.hero{
+    padding:50px 0 36px;
+    border-bottom:1px solid var(--hairline);
+  }
+  .eyebrow{
+    display:inline-flex; align-items:center; gap:8px;
+    font-family:'IBM Plex Mono', monospace; font-size:12px;
+    letter-spacing:0.14em; text-transform:uppercase; color:var(--amber);
+    margin-bottom:16px;
+  }
+  .eyebrow::before{ content:""; width:16px; height:1px; background:var(--amber); }
+  .live-badge{
+    display:inline-flex; align-items:center; gap:6px;
+    font-family:'IBM Plex Mono', monospace; font-size:11px;
+    color:var(--green); border:1px solid rgba(111,207,151,0.4);
+    background:rgba(111,207,151,0.08);
+    padding:4px 10px; border-radius:20px; margin-left:14px;
+    vertical-align:middle;
+  }
+  .live-badge .pulse{
+    width:6px; height:6px; border-radius:50%; background:var(--green);
+    animation:pulse 1.4s ease-in-out infinite;
+  }
+  @keyframes pulse{
+    0%,100%{ opacity:1; transform:scale(1); }
+    50%{ opacity:0.4; transform:scale(0.7); }
+  }
+  h1.hero-title{ font-size:clamp(26px,4vw,38px); font-weight:600; max-width:760px; }
+  .hero-sub{ margin-top:14px; max-width:600px; color:var(--muted); font-size:15px; }
+  .controls{ margin-top:24px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  button.ctrl{
+    font-family:'IBM Plex Mono', monospace; font-size:12px;
+    background:var(--card); color:var(--text); border:1px solid var(--hairline);
+    padding:9px 16px; border-radius:2px; cursor:pointer;
+    transition:border-color 0.15s ease, color 0.15s ease;
+  }
+  button.ctrl:hover{ border-color:var(--teal); color:var(--teal); }
+  button.ctrl.active{ border-color:var(--teal); color:var(--teal); }
+  .speed-label{ font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--muted); }
+
+  /* stat rail */
+  .statrail{
+    display:grid;
+    grid-template-columns:repeat(5,1fr);
+    border-top:1px solid var(--hairline);
+    border-bottom:1px solid var(--hairline);
+  }
+  .stat{
+    padding:22px 24px;
+    border-right:1px solid var(--hairline);
+  }
+  .stat:last-child{ border-right:none; }
+  .stat-label{ font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--muted); letter-spacing:0.06em; text-transform:uppercase; }
+  .stat-value{ font-family:'Space Grotesk', sans-serif; font-size:24px; font-weight:600; margin-top:8px; }
+  .stat-value.teal{ color:var(--teal); }
+  .stat-value.amber{ color:var(--amber); }
+  .stat-value.green{ color:var(--green); }
+  .stat-value.danger{ color:var(--danger); }
+  @media (max-width:900px){ .statrail{ grid-template-columns:repeat(3,1fr); } .stat:nth-child(3){ border-right:none; } }
+  @media (max-width:560px){ .statrail{ grid-template-columns:repeat(2,1fr); } .stat:nth-child(2n){ border-right:none; } }
+
+  /* main grid */
+  .maingrid{
+    display:grid;
+    grid-template-columns:1.3fr 1fr;
+    gap:1px;
+    background:var(--hairline);
+  }
+  @media (max-width:860px){ .maingrid{ grid-template-columns:1fr; } }
+
+  .panel{ background:var(--ink); padding:28px; }
+  .panel-head{
+    display:flex; justify-content:space-between; align-items:center;
+    margin-bottom:18px;
+  }
+  .panel-title{ font-size:14px; font-weight:600; letter-spacing:0.02em; }
+  .panel-tag{ font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--muted); }
+
+  /* event log */
+  #log{
+    height:420px;
+    overflow-y:auto;
+    display:flex;
+    flex-direction:column-reverse;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12.5px;
+  }
+  .logrow{
+    display:grid;
+    grid-template-columns:64px 1fr auto;
+    gap:10px;
+    padding:9px 0;
+    border-bottom:1px solid var(--hairline);
+    animation:slidein 0.3s ease;
+    align-items:center;
+  }
+  @keyframes slidein{ from{ opacity:0; transform:translateY(-4px); } to{ opacity:1; transform:translateY(0); } }
+  .logrow .t{ color:var(--muted); }
+  .logrow .desc{ color:var(--text); }
+  .logrow .amt{ text-align:right; white-space:nowrap; }
+  .logrow.claim .amt{ color:var(--amber); }
+  .logrow.task .amt{ color:var(--teal); }
+  .logrow.bot .amt{ color:var(--danger); }
+  .logrow.sponsor .amt{ color:var(--green); }
+  .tag-pill{
+    font-size:10px; padding:2px 7px; border-radius:20px; border:1px solid var(--hairline);
+    text-transform:uppercase; letter-spacing:0.05em; margin-right:8px;
+  }
+  .tag-pill.task{ color:var(--teal); border-color:rgba(79,209,197,0.35); }
+  .tag-pill.claim{ color:var(--amber); border-color:rgba(232,163,61,0.35); }
+  .tag-pill.bot{ color:var(--danger); border-color:rgba(232,102,77,0.35); }
+  .tag-pill.sponsor{ color:var(--green); border-color:rgba(111,207,151,0.35); }
+
+  /* leaderboard */
+  .member-row{
+    display:grid;
+    grid-template-columns:26px 1fr 70px;
+    gap:12px;
+    align-items:center;
+    padding:10px 0;
+    border-bottom:1px solid var(--hairline);
+  }
+  .member-row:last-child{ border-bottom:none; }
+  .avatar{
+    width:26px; height:26px; border-radius:50%;
+    background:linear-gradient(135deg, var(--teal), var(--amber));
+    font-family:'IBM Plex Mono', monospace; font-size:10px;
+    display:flex; align-items:center; justify-content:center; color:#0E1626; font-weight:600;
+  }
+  .member-info{ font-size:13px; }
+  .member-name{ font-weight:500; }
+  .member-region{ color:var(--muted); font-size:11.5px; font-family:'IBM Plex Mono', monospace; }
+  .bar-track{ height:5px; background:var(--card); border-radius:3px; margin-top:6px; overflow:hidden; }
+  .bar-fill{ height:100%; background:var(--teal); border-radius:3px; transition:width 0.5s ease; }
+  .member-amt{ text-align:right; font-family:'IBM Plex Mono', monospace; font-size:12.5px; color:var(--muted); }
+
+  /* gas comparison */
+  .gas-compare{ margin-top:22px; padding-top:22px; border-top:1px solid var(--hairline); }
+  .gas-row{ display:flex; justify-content:space-between; align-items:baseline; padding:8px 0; }
+  .gas-name{ font-size:13px; color:var(--muted); }
+  .gas-val{ font-family:'IBM Plex Mono', monospace; font-size:15px; }
+  .gas-val.mainnet{ color:var(--danger); }
+  .gas-val.l2{ color:var(--green); }
+  .gas-savings{
+    margin-top:10px; font-family:'IBM Plex Mono', monospace; font-size:11.5px;
+    color:var(--muted); text-align:right;
+  }
+  .gas-savings strong{ color:var(--green); }
+
+  footer{
+    padding:30px 0 50px; color:var(--muted); font-size:12px;
+    font-family:'IBM Plex Mono', monospace;
+    display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px;
+  }
+
+  ::-webkit-scrollbar{ width:6px; }
+  ::-webkit-scrollbar-track{ background:transparent; }
+  ::-webkit-scrollbar-thumb{ background:var(--hairline); border-radius:3px; }
+
+  @media (prefers-reduced-motion: reduce){
+    .live-badge .pulse{ animation:none; }
+    .logrow{ animation:none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="clockbar"><div class="wrap" id="clockbar"></div></div>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="eyebrow">Simulation · Perpetual auto-run</span>
+    <h1 class="hero-title">Reward ledger, running live<span class="live-badge"><span class="pulse"></span>LIVE</span></h1>
+    <p class="hero-sub">Simulated members complete tasks, get filtered for bot activity, accrue points, and auto-claim to an L2 wallet once they cross threshold. This runs continuously — nothing to click, though you can pause or change speed.</p>
+    <div class="controls">
+      <button class="ctrl active" id="btnPause">⏸ Pause</button>
+      <button class="ctrl" id="speed1">1×</button>
+      <button class="ctrl active" id="speed2">3×</button>
+      <button class="ctrl" id="speed3">8×</button>
+      <span class="speed-label">tick speed</span>
+    </div>
+  </div>
+</header>
+
+<div class="statrail wrap" style="padding:0;">
+  <div class="stat"><div class="stat-label">Tasks completed</div><div class="stat-value teal" id="statTasks">0</div></div>
+  <div class="stat"><div class="stat-label">Bots blocked</div><div class="stat-value danger" id="statBots">0</div></div>
+  <div class="stat"><div class="stat-label">Total claimed</div><div class="stat-value amber" id="statClaimed">$0.00</div></div>
+  <div class="stat"><div class="stat-label">Claims settled</div><div class="stat-value" id="statClaims">0</div></div>
+  <div class="stat"><div class="stat-label">Sponsor pool</div><div class="stat-value green" id="statPool">$500.00</div></div>
+</div>
+
+<div class="maingrid wrap" style="padding:0; max-width:1120px; margin:0 auto;">
+  <div class="panel">
+    <div class="panel-head">
+      <span class="panel-title">Event stream</span>
+      <span class="panel-tag mono" id="tickCount">tick 0</span>
+    </div>
+    <div id="log"></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head">
+      <span class="panel-title">Member balances</span>
+      <span class="panel-tag mono">pending → claim</span>
+    </div>
+    <div id="members"></div>
+
+    <div class="gas-compare">
+      <div class="panel-head" style="margin-bottom:8px;">
+        <span class="panel-title" style="font-size:13px;">Gas cost, this claim</span>
+      </div>
+      <div class="gas-row">
+        <span class="gas-name">Ethereum Mainnet (equivalent)</span>
+        <span class="gas-val mainnet mono" id="gasMainnet">$—</span>
+      </div>
+      <div class="gas-row">
+        <span class="gas-name">Base L2 (actual)</span>
+        <span class="gas-val l2 mono" id="gasL2">$—</span>
+      </div>
+      <div class="gas-savings" id="gasSavings">—</div>
+    </div>
+  </div>
+</div>
+
+<footer class="wrap">
+  <span>REWARD LEDGER SIMULATION — SYNTHETIC DATA, NO REAL FUNDS OR TRANSACTIONS</span>
+  <span id="uptime">UPTIME 00:00:00</span>
+</footer>
+
+<script>
+/* ---------------- world clock ---------------- */
+function pad(n){ return n.toString().padStart(2,'0'); }
+const regions = [
+  { name:"SAN FRANCISCO", offset:-7 }, { name:"NEW YORK", offset:-4 },
+  { name:"LONDON", offset:1 }, { name:"LAGOS", offset:1 },
+  { name:"SINGAPORE", offset:8 }, { name:"SYDNEY", offset:10 }
+];
+function renderClocks(){
+  const bar = document.getElementById('clockbar');
+  const now = new Date();
+  const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+  bar.innerHTML = regions.map(r=>{
+    const t = new Date(utc + (3600000*r.offset));
+    const time = pad(t.getHours())+":"+pad(t.getMinutes())+":"+pad(t.getSeconds());
+    return `<div class="clock-cell"><span class="clock-dot"></span><span class="clock-region">${r.name}</span><span class="clock-time">${time}</span></div>`;
+  }).join('');
+}
+renderClocks();
+setInterval(renderClocks, 1000);
+
+/* ---------------- simulation state ---------------- */
+const memberNames = [
+  { name:"A. Okafor", region:"LAGOS" },
+  { name:"J. Tanaka", region:"TOKYO" },
+  { name:"M. Silva", region:"SÃO PAULO" },
+  { name:"R. Novak", region:"BERLIN" },
+  { name:"P. Sharma", region:"MUMBAI" },
+  { name:"K. Lindqvist", region:"STOCKHOLM" },
+  { name:"D. Osei", region:"ACCRA" },
+  { name:"C. Reyes", region:"MANILA" }
+];
+
+let members = memberNames.map((m,i)=>({
+  id:i, name:m.name, region:m.region,
+  pending: Math.random()*3,
+  threshold: 5 + Math.random()*5,
+  initials: m.name.split(' ').map(w=>w[0]).join('').replace('.','')
+}));
+
+let stats = { tasks:0, bots:0, claimed:0, claims:0, pool:500 };
+let tick = 0;
+let running = true;
+let tickMs = 1400; // default ~3x
+let uptimeSec = 0;
+let logEl = document.getElementById('log');
+let intervalHandle = null;
+
+function fmt(n){ return "$" + n.toFixed(2); }
+
+function pushLog(type, html, amt){
+  const row = document.createElement('div');
+  row.className = "logrow " + type;
+  const now = new Date();
+  row.innerHTML = `<span class="t">${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}</span>
+    <span class="desc"><span class="tag-pill ${type}">${type}</span>${html}</span>
+    <span class="amt">${amt || ''}</span>`;
+  logEl.prepend(row);
+  while(logEl.children.length > 60){ logEl.removeChild(logEl.lastChild); }
+}
+
+function updateStats(){
+  document.getElementById('statTasks').textContent = stats.tasks;
+  document.getElementById('statBots').textContent = stats.bots;
+  document.getElementById('statClaimed').textContent = fmt(stats.claimed);
+  document.getElementById('statClaims').textContent = stats.claims;
+  document.getElementById('statPool').textContent = fmt(stats.pool);
+  document.getElementById('tickCount').textContent = "tick " + tick;
+}
+
+function renderMembers(){
+  const el = document.getElementById('members');
+  el.innerHTML = members.map(m=>{
+    const pct = Math.min(100, (m.pending/m.threshold)*100);
+    return `<div class="member-row">
+      <div class="avatar">${m.initials}</div>
+      <div class="member-info">
+        <div class="member-name">${m.name}</div>
+        <div class="member-region">${m.region}</div>
+        <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+      </div>
+      <div class="member-amt">${fmt(m.pending)}<br><span style="color:var(--hairline)">/ ${fmt(m.threshold)}</span></div>
+    </div>`;
+  }).join('');
+}
+
+function simulateGas(){
+  const mainnet = 2.8 + Math.random()*11; // $2.80 - $13.80
+  const l2 = 0.002 + Math.random()*0.007; // $0.002 - $0.009
+  document.getElementById('gasMainnet').textContent = fmt(mainnet);
+  document.getElementById('gasL2').textContent = "$" + l2.toFixed(4);
+  const multiple = (mainnet/l2);
+  document.getElementById('gasSavings').innerHTML = `L2 is <strong>${multiple.toFixed(0)}×</strong> cheaper this claim`;
+}
+
+function doTick(){
+  tick++;
+  const m = members[Math.floor(Math.random()*members.length)];
+
+  // 12% chance: bot flagged, no reward
+  if(Math.random() < 0.12){
+    stats.bots++;
+    pushLog("bot", `Suspicious task completion flagged for <strong>${m.name}</strong> — reward withheld`, "blocked");
+  } else {
+    const reward = 0.04 + Math.random()*0.32;
+    if(stats.pool >= reward){
+      stats.pool -= reward;
+      m.pending += reward;
+      stats.tasks++;
+      pushLog("task", `${m.name} completed a task <span style="color:var(--muted)">(${m.region})</span>`, "+"+fmt(reward));
+
+      if(m.pending >= m.threshold){
+        simulateGas();
+        stats.claimed += m.pending;
+        stats.claims++;
+        pushLog("claim", `${m.name} auto-claimed to Base wallet`, fmt(m.pending));
+        m.pending = 0;
+        m.threshold = 5 + Math.random()*5;
+      }
+    } else {
+      pushLog("sponsor", `Sponsor pool topped up by partner brand`, "+$250.00");
+      stats.pool += 250;
+    }
+  }
+
+  if(stats.pool < 15 && Math.random() < 0.3){
+    pushLog("sponsor", `Sponsor pool topped up by partner brand`, "+$250.00");
+    stats.pool += 250;
+  }
+
+  updateStats();
+  renderMembers();
+}
+
+function startLoop(){
+  if(intervalHandle) clearInterval(intervalHandle);
+  intervalHandle = setInterval(doTick, tickMs);
+}
+
+/* controls */
+document.getElementById('btnPause').addEventListener('click', function(){
+  running = !running;
+  if(running){
+    this.textContent = "⏸ Pause";
+    this.classList.add('active');
+    startLoop();
+  } else {
+    this.textContent = "▶ Resume";
+    this.classList.remove('active');
+    clearInterval(intervalHandle);
+  }
+});
+
+function setSpeed(ms, btnId){
+  tickMs = ms;
+  ['speed1','speed2','speed3'].forEach(id=>document.getElementById(id).classList.remove('active'));
+  document.getElementById(btnId).classList.add('active');
+  if(running) startLoop();
+}
+document.getElementById('speed1').addEventListener('click', ()=>setSpeed(2400,'speed1'));
+document.getElementById('speed2').addEventListener('click', ()=>setSpeed(1400,'speed2'));
+document.getElementById('speed3').addEventListener('click', ()=>setSpeed(500,'speed3'));
+
+/* uptime */
+setInterval(()=>{
+  uptimeSec++;
+  const h = pad(Math.floor(uptimeSec/3600));
+  const mi = pad(Math.floor((uptimeSec%3600)/60));
+  const s = pad(uptimeSec%60);
+  document.getElementById('uptime').textContent = `UPTIME ${h}:${mi}:${s}`;
+}, 1000);
+
+/* boot */
+renderMembers();
+updateStats();
+simulateGas();
+for(let i=0;i<6;i++) doTick(); // seed the log so it's not empty on load
+startLoop();
+</script>
+
+</body>
+</html>
